@@ -9,6 +9,7 @@ Description: layers
 import torch
 from torch import nn
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class CodeBook(nn.Module):
@@ -68,7 +69,7 @@ class DiscreteKV(nn.Module):
 
 def generate_dataset():
     total_classes = 8
-    thetas = np.linspace(0, 2 * np.pi, total_classes)
+    thetas = np.linspace(0, 2 * np.pi, total_classes + 1)
     r = 0.1
     centers = np.cos(thetas), np.sin(thetas)
     total_point = []
@@ -86,20 +87,32 @@ def generate_dataset():
 def main():
     x, y = generate_dataset()
     net = nn.Sequential(
-        nn.Linear(2, 32),
-        DiscreteKV(32, 4, 2, 32, 8),
+        DiscreteKV(2, 4, 2, 32, 8),
         nn.Linear(64, 8),
     )
     x = torch.Tensor(x)
     y = torch.Tensor(y).long()
     opt = torch.optim.SGD(net.parameters(), lr=0.01)
-    for _ in range(1000):
+    for _ in range(100):
         net.train()
         output = net(x)
         loss = nn.functional.cross_entropy(output, y)
         loss.backward()
         print(loss.item())
         opt.step()
+
+    X = torch.linspace(-2, 2, 100)
+    Y = torch.linspace(-2, 2, 100)
+    X, Y = torch.meshgrid(X, Y)
+
+    samples = torch.stack([X.reshape([-1]), Y.reshape([-1])]).T
+    label = torch.argmax(net(samples), dim=-1)
+    colors = ["C" + str(c.item()) for c in label]
+    plt.scatter(samples[:, 0], samples[:, 1], c=colors, alpha=0.3)
+
+    for index, class_ in enumerate(set(y)):
+        plt.scatter(x[y == class_][:, 0], x[y == class_][:, 1], c=f"C{index}")
+    plt.show()
 
 
 if __name__ == "__main__":
