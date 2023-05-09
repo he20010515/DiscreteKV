@@ -8,6 +8,7 @@ Description: layers
 """
 import torch
 from torch import nn
+import torch.random
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -19,7 +20,7 @@ class CodeBook(nn.Module):
         super().__init__()
         self.input_channel = input_channel
         self.output_channel = output_channel
-        self.keys = torch.randn([kvpairs_num, input_channel])
+        self.keys = (torch.rand([kvpairs_num, input_channel]) - 0.5) * 3
         self.values = torch.nn.Parameter(torch.randn([kvpairs_num, output_channel]))
         self.kvpairs_num = kvpairs_num
 
@@ -35,6 +36,7 @@ class CodeBook(nn.Module):
         view_key = self.keys.view([1, self.kvpairs_num, self.input_channel])
         distances = (view_x - view_key) ** 2  # broading cast
         distances = torch.sum(distances, dim=-1)
+        distances = torch.sqrt(distances)
         min_index = torch.argmin(distances, -1)
         return self.values[min_index]
 
@@ -65,55 +67,3 @@ class DiscreteKV(nn.Module):
             ys, dim=-1
         )  # ys.shape [batch_size,codebook_num * output_channels]
         return ys
-
-
-def generate_dataset():
-    total_classes = 8
-    thetas = np.linspace(0, 2 * np.pi, total_classes + 1)
-    r = 0.1
-    centers = np.cos(thetas), np.sin(thetas)
-    total_point = []
-    total_label = []
-    for xc, yc, label in zip(*centers, range(total_classes)):
-        points = np.random.normal(0, r, size=[100, 2])
-        points = points + np.array([xc, yc])
-        total_point.append(points)
-        total_label += [label] * 100
-    total_point = np.concatenate(total_point)
-    total_label = np.array(total_label)
-    return total_point, total_label
-
-
-def main():
-    x, y = generate_dataset()
-    net = nn.Sequential(
-        DiscreteKV(2, 4, 2, 32, 8),
-        nn.Linear(64, 8),
-    )
-    x = torch.Tensor(x)
-    y = torch.Tensor(y).long()
-    opt = torch.optim.SGD(net.parameters(), lr=0.01)
-    for _ in range(100):
-        net.train()
-        output = net(x)
-        loss = nn.functional.cross_entropy(output, y)
-        loss.backward()
-        print(loss.item())
-        opt.step()
-
-    X = torch.linspace(-2, 2, 100)
-    Y = torch.linspace(-2, 2, 100)
-    X, Y = torch.meshgrid(X, Y)
-
-    samples = torch.stack([X.reshape([-1]), Y.reshape([-1])]).T
-    label = torch.argmax(net(samples), dim=-1)
-    colors = ["C" + str(c.item()) for c in label]
-    plt.scatter(samples[:, 0], samples[:, 1], c=colors, alpha=0.3)
-
-    for index, class_ in enumerate(set(y)):
-        plt.scatter(x[y == class_][:, 0], x[y == class_][:, 1], c=f"C{index}")
-    plt.show()
-
-
-if __name__ == "__main__":
-    main()
